@@ -34,6 +34,7 @@ bitset-core = { version = "0.1.1", optional = true }
 oxttl = { version = "0.2.1", optional = true }
 lasso = { version = "0.7.3", features = ["multi-threaded"], optional = true }
 memmap2 = { version = "0.9" }
+fs2 = "0.4"
 
 [features]
 default = ["sophia", "nt"]

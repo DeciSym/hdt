@@ -177,36 +177,41 @@ fn parse_nt_terms(path: &Path) -> Result<IndexPool> {
     // Store triple indices instead of strings
     let readers =
         NTriplesParser::new().split_file_for_parallel_parsing(path, thread::available_parallelism()?.get())?;
-    let triples: Vec<[usize; 3]> = readers
+    let triple_chunks: Result<Vec<Vec<[usize; 3]>>> = readers
         .into_par_iter()
-        .flat_map_iter(|reader| {
-            //for q in reader {
-            reader.map(|q| {
-                let clean = |s: &mut String| {
-                    let mut chars = s.chars();
-                    if chars.next() == Some('<') && chars.nth_back(0) == Some('>') {
-                        s.remove(0);
-                        s.pop();
-                    }
-                };
-                let q = q.unwrap(); // TODO: error handling
-                let mut subj_str = q.subject.to_string();
-                clean(&mut subj_str);
-                let mut pred_str = q.predicate.to_string();
-                clean(&mut pred_str);
-                let mut obj_str = q.object.to_string();
-                clean(&mut obj_str);
+        .map(|reader| {
+            reader
+                .map(|q| {
+                    let clean = |s: &mut String| {
+                        let mut chars = s.chars();
+                        if chars.next() == Some('<') && chars.nth_back(0) == Some('>') {
+                            s.remove(0);
+                            s.pop();
+                        }
+                    };
+                    let q = q.map_err(|e| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Error reading N-Triples: {e}"),
+                        )
+                    })?;
+                    let mut subj_str = q.subject.to_string();
+                    clean(&mut subj_str);
+                    let mut pred_str = q.predicate.to_string();
+                    clean(&mut pred_str);
+                    let mut obj_str = q.object.to_string();
+                    clean(&mut obj_str);
 
-                let s_idx = lasso.get_or_intern(subj_str).into_usize();
-                let p_idx = lasso.get_or_intern(pred_str).into_usize();
-                let o_idx = lasso.get_or_intern(obj_str).into_usize();
+                    let s_idx = lasso.get_or_intern(subj_str).into_usize();
+                    let p_idx = lasso.get_or_intern(pred_str).into_usize();
+                    let o_idx = lasso.get_or_intern(obj_str).into_usize();
 
-                [s_idx, p_idx, o_idx]
-            })
+                    Ok([s_idx, p_idx, o_idx])
+                })
+                .collect::<Result<Vec<[usize; 3]>>>()
         })
         .collect();
-    // TODO: error handling
-    //.map_err(|e| Error::Other(format!("Error reading N-Triples: {e:?}")))?;
+    let triples: Vec<[usize; 3]> = triple_chunks?.into_iter().flatten().collect();
     let lasso = Arc::try_unwrap(lasso).unwrap(); // no parallel usage anymore
     // Track which indices are subjects/objects/predicates
     let block = [0u64; 4];
@@ -282,6 +287,7 @@ pub mod tests {
     use crate::tests::init;
     use color_eyre::Result;
     use fs_err::File;
+    use std::fs;
     use std::path::Path;
 
     #[test]
@@ -307,6 +313,25 @@ pub mod tests {
         let mut buf = Vec::<u8>::new();
         hdt_empty.write(&mut buf)?;
         Hdt::read(std::io::Cursor::new(buf))?;
+        Ok(())
+    }
+
+    #[test]
+    fn read_nt_invalid_input_returns_error_without_panic() -> Result<()> {
+        init();
+        let invalid_path = std::env::temp_dir().join(format!(
+            "hdt-invalid-nt-{}-{}.nt",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("unnamed")
+        ));
+        fs::write(&invalid_path, "invalid triple\n")?;
+
+        let result = std::panic::catch_unwind(|| Hdt::read_nt(&invalid_path));
+        assert!(result.is_ok(), "Hdt::read_nt should return Err instead of panicking on invalid N-Triples");
+        let parse_result = result.expect("catch_unwind should not fail");
+        assert!(parse_result.is_err(), "invalid N-Triples should produce an error result");
+
+        let _ = fs::remove_file(&invalid_path);
         Ok(())
     }
 }
