@@ -110,6 +110,15 @@ impl Sequence {
     /// Get the integer at the given index, counting from 0.
     /// Panics if the index is out of bounds.
     pub fn get(&self, index: usize) -> usize {
+        // A sequence of all-zero values is encoded with `bits_per_entry == 0`
+        // and an empty `data` vector (see `Sequence::new_from_u32`). Without
+        // this guard the indexing below would panic on the empty `data`. The
+        // mmap-backed counterpart (`MmapSequence::read_value`) has the same
+        // short-circuit, so this keeps the two backends in agreement.
+        if self.bits_per_entry == 0 {
+            return 0;
+        }
+
         let scaled_index = index * self.bits_per_entry;
         let block_index = scaled_index / USIZE_BITS;
         let bit_index = scaled_index % USIZE_BITS;

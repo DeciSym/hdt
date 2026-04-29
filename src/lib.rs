@@ -116,6 +116,10 @@ pub mod wasm;
 pub use crate::hdt::{Hdt, HdtGeneric};
 #[cfg(feature = "cache")]
 pub use crate::hdt::HdtHybrid;
+#[cfg(feature = "cache")]
+pub mod hdt_any;
+#[cfg(feature = "cache")]
+pub use crate::hdt_any::HdtAny;
 use containers::ControlInfo;
 use dict_sect_pfc::DictSectPFC;
 pub use dict_sect_pfc::{DictSectPfcAccess, MmapDictSectPfc};
