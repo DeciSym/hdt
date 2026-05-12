@@ -66,7 +66,9 @@ pub enum Error {
     /// The serialized dictionary section offset is larger than this platform's
     /// `usize`. On 32-bit targets this fires for any offset above `u32::MAX`
     /// (~4 GiB). On 64-bit it cannot fire.
-    #[error("dict section offset {offset} exceeds platform usize::MAX ({usize_max}); this cache file requires a 64-bit target")]
+    #[error(
+        "dict section offset {offset} exceeds platform usize::MAX ({usize_max}); this cache file requires a 64-bit target"
+    )]
     OffsetTooLargeForPlatform { offset: u64, usize_max: u64 },
 }
 
@@ -395,8 +397,7 @@ impl DictSectPFC {
                 offsets.push(compressed_terms.len());
                 compressed_terms.extend_from_slice(term_bytes);
             } else {
-                let common_prefix_len =
-                    last_term.iter().zip(term_bytes).take_while(|(a, b)| a == b).count();
+                let common_prefix_len = last_term.iter().zip(term_bytes).take_while(|(a, b)| a == b).count();
                 compressed_terms.extend_from_slice(&encode_vbyte(common_prefix_len));
                 compressed_terms.extend_from_slice(&term_bytes[common_prefix_len..]);
             }
@@ -554,9 +555,9 @@ impl MmapDictSectPfc {
 
         // Locate the packed data region within the mmap.
         let packed_data_start = section_offset as usize + cursor.position() as usize;
-        let packed_data_end = packed_data_start
-            .checked_add(packed_length)
-            .ok_or_else(|| Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, "packed data offset overflow")))?;
+        let packed_data_end = packed_data_start.checked_add(packed_length).ok_or_else(|| {
+            Error::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, "packed data offset overflow"))
+        })?;
         // Ensure the CRC32 trailer is also in bounds for serialized_len math.
         let trailer_end = packed_data_end + 4;
         if trailer_end > mmap_len {
@@ -674,9 +675,9 @@ impl MmapDictSectPfc {
     pub fn verify_crc32(&self) -> Result<()> {
         let data = self.packed_data();
         let trailer_offset = self.packed_data_offset + self.packed_data_len;
-        let trailer: [u8; 4] = self.mmap[trailer_offset..trailer_offset + 4]
-            .try_into()
-            .map_err(|_| Error::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "missing CRC32 trailer")))?;
+        let trailer: [u8; 4] = self.mmap[trailer_offset..trailer_offset + 4].try_into().map_err(|_| {
+            Error::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "missing CRC32 trailer"))
+        })?;
         let stored = u32::from_le_bytes(trailer);
 
         let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISCSI);

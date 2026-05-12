@@ -1,12 +1,12 @@
 use crate::containers::ControlInfo;
 use crate::containers::rdf::{Id, Literal, Term, Triple};
-use ntriple::parser::triple_line;
+use oxrdf::{NamedOrBlankNode, Term as OxTerm};
+use oxttl::NTriplesParser;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::path::Path;
-use std::str;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -63,36 +63,33 @@ impl Header {
         reader.read_exact(&mut body_buffer)?;
         let mut body = BTreeSet::new();
 
-        for line_slice in body_buffer.split(|b| b == &b'\n') {
-            let line = str::from_utf8(line_slice).map_err(|_| Error::Other("Header is not UTF-8".to_owned()))?;
-            if let Ok(Some(triple)) = triple_line(line) {
-                let subject = match triple.subject {
-                    ntriple::Subject::IriRef(iri) => Id::Named(iri),
-                    ntriple::Subject::BNode(id) => Id::Blank(id),
-                };
+        for parsed in NTriplesParser::new().for_slice(&body_buffer) {
+            let Ok(triple) = parsed else { continue };
 
-                let ntriple::Predicate::IriRef(predicate) = triple.predicate;
+            let subject = match triple.subject {
+                NamedOrBlankNode::NamedNode(iri) => Id::Named(iri.into_string()),
+                NamedOrBlankNode::BlankNode(id) => Id::Blank(id.into_string()),
+            };
 
-                let object = match triple.object {
-                    ntriple::Object::IriRef(iri) => Term::Id(Id::Named(iri)),
-                    ntriple::Object::BNode(id) => Term::Id(Id::Blank(id)),
-                    ntriple::Object::Lit(lit) => Term::Literal(match lit.data_type {
-                        ntriple::TypeLang::Lang(lan) => Literal::new_lang(lit.data, lan),
-                        ntriple::TypeLang::Type(data_type) => {
-                            // workaround incorrect https in xsd prefix in ntriples dependency
-                            if data_type == "http://www.w3.org/2001/XMLSchema#string"
-                                || data_type == "https://www.w3.org/2001/XMLSchema#string"
-                            {
-                                Literal::new(lit.data)
-                            } else {
-                                Literal::new_typed(lit.data, data_type)
-                            }
-                        }
-                    }),
-                };
+            let predicate = triple.predicate.into_string();
 
-                body.insert(Triple::new(subject, predicate, object));
-            }
+            let object = match triple.object {
+                OxTerm::NamedNode(iri) => Term::Id(Id::Named(iri.into_string())),
+                OxTerm::BlankNode(id) => Term::Id(Id::Blank(id.into_string())),
+                OxTerm::Literal(lit) => {
+                    // oxrdf normalizes "..."^^xsd:string to a plain literal, so the
+                    // destructured datatype is None exactly when the literal had no
+                    // explicit non-string datatype.
+                    let (form, datatype, lang) = lit.destruct();
+                    Term::Literal(match (datatype, lang) {
+                        (_, Some(lan)) => Literal::new_lang(form, lan),
+                        (Some(dt), None) => Literal::new_typed(form, dt.into_string()),
+                        (None, None) => Literal::new(form),
+                    })
+                }
+            };
+
+            body.insert(Triple::new(subject, predicate, object));
         }
         Ok(Header { format: header_ci.format, length, body })
     }

@@ -191,7 +191,7 @@ fn parse_nt_terms(path: &Path) -> Result<ParsedTerms> {
     // workaround for bug with lasso v0.7.3 when concurrency is too high, see https://github.com/Kixiron/lasso/issues/48
     // experiments have always failed with 24, often with 23 and sometimes with 22 threads, choose 16 to be on the safe side
     // use two threads when available parallelism cannot be determined as going to a single thread is around 38% slower
-    let num_parsers = std::cmp::min(16, thread::available_parallelism().map(|n| n.get()).unwrap_or(2));
+    let num_parsers = std::cmp::min(16, thread::available_parallelism().map_or(2, |n| n.get()));
     // Store triple indices instead of strings
     let readers = NTriplesParser::new().split_file_for_parallel_parsing(path, num_parsers)?;
     let triples: Vec<[Spur; 3]> = readers
@@ -205,9 +205,7 @@ fn parse_nt_terms(path: &Path) -> Result<ParsedTerms> {
                         s.pop();
                     }
                 };
-                let q = q.map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-                })?;
+                let q = q.map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 let mut subj_str = q.subject.to_string();
                 clean(&mut subj_str);
                 let mut pred_str = q.predicate.to_string();

@@ -1,8 +1,8 @@
+#[cfg(feature = "cache")]
+use crate::containers::{AdjListGeneric, MmapBitmap, MmapSequence};
 use crate::containers::{
     BitmapAccess, ControlInfo, InMemoryBitmap, InMemorySequence, SequenceAccess, bitmap, control_info, sequence,
 };
-#[cfg(feature = "cache")]
-use crate::containers::{AdjListGeneric, MmapBitmap, MmapSequence};
 use crate::dict_sect_pfc::DictSectPfcAccess;
 #[cfg(feature = "cache")]
 use crate::dict_sect_pfc::MmapDictSectPfc;
@@ -12,7 +12,9 @@ use crate::header::Header;
 use crate::triples::hybrid_cache::HybridCacheError;
 #[cfg(feature = "cache")]
 use crate::triples::{HybridCache, OpIndexGeneric};
-use crate::triples::{Id, ObjectIter, PredicateIter, PredicateObjectIter, SubjectIter, TripleId, TriplesBitmapGeneric};
+use crate::triples::{
+    Id, ObjectIter, PredicateIter, PredicateObjectIter, SubjectIter, TripleId, TriplesBitmapGeneric,
+};
 use crate::{DictSectPFC, FourSectDict, header};
 use bytesize::ByteSize;
 use log::{debug, error};
@@ -456,7 +458,8 @@ impl Hdt {
         let op_index = OpIndexGeneric::new(op_index_sequence, op_index_bitmap);
 
         let order = cache.order()?;
-        let triples = TriplesBitmapGeneric::from_components(order, bitmap_y, adjlist_z, op_index, cache.wavelet_y)?;
+        let triples =
+            TriplesBitmapGeneric::from_components(order, bitmap_y, adjlist_z, op_index, cache.wavelet_y)?;
 
         let hdt = HdtHybrid { header, dict, triples };
         debug!("HDT Hybrid size in memory {}, details:", ByteSize(hdt.size_in_bytes() as u64));
@@ -690,8 +693,8 @@ pub mod tests {
         init();
 
         let unique = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let test_dir: PathBuf = std::env::temp_dir()
-            .join(format!("hdt-hybrid-cache-itest-{}-{unique}", std::process::id()));
+        let test_dir: PathBuf =
+            std::env::temp_dir().join(format!("hdt-hybrid-cache-itest-{}-{unique}", std::process::id()));
         std::fs::create_dir_all(&test_dir)?;
         let path = test_dir.join("snikmeta.hdt");
         std::fs::copy("tests/resources/snikmeta.hdt", &path)?;
@@ -718,7 +721,11 @@ pub mod tests {
         let p = "http://www.w3.org/2000/01/rdf-schema#label";
         let o = "\"top class\"@en";
         let triple_vec = vec![[Arc::from(s), Arc::from(p), Arc::from(o)]];
-        assert_eq!(triple_vec, hdt_hybrid.triples_with_pattern(Some(s), Some(p), Some(o)).collect::<Vec<_>>(), "SPO");
+        assert_eq!(
+            triple_vec,
+            hdt_hybrid.triples_with_pattern(Some(s), Some(p), Some(o)).collect::<Vec<_>>(),
+            "SPO"
+        );
         assert_eq!(triple_vec, hdt_hybrid.triples_with_pattern(Some(s), Some(p), None).collect::<Vec<_>>(), "SP?");
 
         // Load again from existing cache
@@ -741,11 +748,7 @@ pub mod tests {
 
     /// Generic version of snikmeta_check that works with any HdtGeneric variant (Hdt, HdtHybrid, etc.)
     #[cfg(feature = "cache")]
-    pub fn snikmeta_check_generic<
-        D: DictSectPfcAccess,
-        S: SequenceAccess,
-        B: BitmapAccess,
-    >(
+    pub fn snikmeta_check_generic<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess>(
         hdt: &HdtGeneric<D, S, B>,
     ) -> Result<()> {
         let triples = &hdt.triples;
@@ -788,8 +791,7 @@ pub mod tests {
         assert_eq!(20, hdt.triples_with_pattern(None, None, Some(et)).count());
         let snikeu = "http://www.snik.eu";
         let triple_vec = [
-            "http://purl.org/dc/terms/publisher",
-            "http://purl.org/dc/terms/source",
+            "http://purl.org/dc/terms/publisher", "http://purl.org/dc/terms/source",
             "http://xmlns.com/foaf/0.1/homepage",
         ]
         .into_iter()

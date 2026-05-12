@@ -111,7 +111,5 @@ pub type AdjListInMemory = AdjListGeneric<
     crate::containers::bitmap_access::InMemoryBitmap,
 >;
 
-pub type AdjListMmap = AdjListGeneric<
-    crate::containers::sequence_access::MmapSequence,
-    crate::containers::bitmap_access::MmapBitmap,
->;
+pub type AdjListMmap =
+    AdjListGeneric<crate::containers::sequence_access::MmapSequence, crate::containers::bitmap_access::MmapBitmap>;

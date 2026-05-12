@@ -248,11 +248,7 @@ pub struct MmapBitmap {
 
 impl fmt::Debug for MmapBitmap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} bits, {} ones, mmaped from file",
-            self.num_bits, self.num_ones_cached
-        )
+        write!(f, "{} bits, {} ones, mmaped from file", self.num_bits, self.num_ones_cached)
     }
 }
 
@@ -264,7 +260,9 @@ pub enum MmapBitmapError {
     /// The serialized offset is larger than this platform's `usize`. On 32-bit
     /// targets this fires for any offset above `u32::MAX` (~4 GiB). On 64-bit
     /// it cannot fire — `u64::MAX as u64 == usize::MAX as u64`.
-    #[error("bitmap offset {offset} exceeds platform usize::MAX ({usize_max}); this cache file requires a 64-bit target")]
+    #[error(
+        "bitmap offset {offset} exceeds platform usize::MAX ({usize_max}); this cache file requires a 64-bit target"
+    )]
     OffsetTooLargeForPlatform { offset: u64, usize_max: u64 },
     #[error("unsupported bitmap type {0}, expected 1")]
     UnsupportedType(u8),
@@ -352,24 +350,17 @@ impl MmapBitmap {
         // Bounds check: every read we will ever perform must lie inside mmap.
         let data_size = bitmap_data_size_bytes(num_bits, num_words);
         if data_offset.saturating_add(data_size) > mmap_len {
-            return Err(MmapBitmapError::DataPastEnd { offset: data_offset, needed: data_size, len: mmap_len }.into());
+            return Err(
+                MmapBitmapError::DataPastEnd { offset: data_offset, needed: data_size, len: mmap_len }.into()
+            );
         }
 
         // Pre-compute num_ones. The constructor reads every byte once, which
         // is the same work the legacy Bitmap::read does. Subsequent calls to
         // num_ones() are then O(1).
-        let num_ones_cached =
-            count_ones_in_slice(&mmap[data_offset..data_offset + data_size], num_bits);
+        let num_ones_cached = count_ones_in_slice(&mmap[data_offset..data_offset + data_size], num_bits);
 
-        Ok(Self {
-            mmap,
-            data_offset,
-            num_bits,
-            num_words,
-            metadata_size,
-            num_ones_cached,
-            rank_index: None,
-        })
+        Ok(Self { mmap, data_offset, num_bits, num_words, metadata_size, num_ones_cached, rank_index: None })
     }
 
     /// Like [`Self::from_mmap`] but also attaches a precomputed rank index
@@ -621,12 +612,7 @@ impl BitmapAccess for MmapBitmap {
     }
 
     fn access(&self, pos: usize) -> bool {
-        assert!(
-            pos < self.num_bits,
-            "MmapBitmap::access out of bounds: pos {} >= len {}",
-            pos,
-            self.num_bits
-        );
+        assert!(pos < self.num_bits, "MmapBitmap::access out of bounds: pos {} >= len {}", pos, self.num_bits);
         let byte_offset = self.data_offset + pos / 8;
         let bit_in_byte = pos % 8;
         (self.mmap[byte_offset] >> bit_in_byte) & 1 == 1
@@ -679,7 +665,9 @@ fn count_ones_in_slice(data: &[u8], num_bits: usize) -> usize {
     count
 }
 
-fn read_one_byte<T: AsRef<[u8]>>(cursor: &mut std::io::Cursor<T>, base_offset: u64) -> Result<u8, MmapBitmapError> {
+fn read_one_byte<T: AsRef<[u8]>>(
+    cursor: &mut std::io::Cursor<T>, base_offset: u64,
+) -> Result<u8, MmapBitmapError> {
     use std::io::Read;
     let mut buf = [0u8];
     cursor.read_exact(&mut buf).map_err(|_| MmapBitmapError::Truncated(base_offset))?;
@@ -741,13 +729,7 @@ mod rank_index_tests {
     /// exercises `rank_with_index` and `select1_with_index`.
     fn bitmap_with_rank(bitmap: &Bitmap) -> MmapBitmap {
         let (mmap, bitmap_offset, rank_offset) = build_bitmap_mmap(bitmap);
-        MmapBitmap::from_mmap_with_rank_index(
-            Arc::clone(&mmap),
-            bitmap_offset,
-            mmap,
-            rank_offset,
-        )
-        .unwrap()
+        MmapBitmap::from_mmap_with_rank_index(Arc::clone(&mmap), bitmap_offset, mmap, rank_offset).unwrap()
     }
 
     #[test]
