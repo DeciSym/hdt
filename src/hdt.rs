@@ -25,6 +25,9 @@ use std::sync::Arc;
 
 pub type Result<T> = core::result::Result<T, Error>;
 #[cfg(feature = "nt")]
+#[path = "concurrent_interner.rs"]
+mod concurrent_interner;
+#[cfg(feature = "nt")]
 #[path = "nt.rs"]
 /// Converting N-Triples to HDT, available only if HDT is built with the experimental `"nt"` feature.
 mod nt;
@@ -298,8 +301,8 @@ impl Hdt {
     #[cfg(feature = "sophia")]
     pub fn write_nt(&self, write: &mut impl std::io::Write) -> std::io::Result<()> {
         use sophia::api::prelude::TripleSerializer;
-        use sophia::turtle::serializer::nt::NtSerializer;
-        NtSerializer::new(write).serialize_graph(self).map_err(|e| std::io::Error::other(format!("{e}")))?;
+        use sophia::turtle::serializer::nt::NTriplesSerializer;
+        NTriplesSerializer::new(write).serialize_graph(self).map_err(|e| std::io::Error::other(format!("{e}")))?;
         Ok(())
     }
 
