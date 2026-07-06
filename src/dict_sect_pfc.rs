@@ -381,8 +381,8 @@ impl DictSectPFC {
     /// The caller must guarantee `terms` yields exactly `num_terms` items in
     /// ascending lexicographic order with no duplicates. This entry point lets
     /// callers avoid materializing an intermediate `BTreeSet` or `Vec<&str>`
-    /// when they already have the sorted sequence (e.g. a sorted `Vec<Spur>`
-    /// resolved on the fly) — the major memory saver during NT ingest.
+    /// when they already have the sorted sequence (e.g. a sorted `Vec<u32>` of
+    /// term indices resolved on the fly) — the major memory saver during NT ingest.
     pub fn compress_iter<'a, I>(terms: I, num_terms: usize, block_size: usize) -> Self
     where
         I: IntoIterator<Item = &'a str>,
@@ -582,7 +582,7 @@ impl MmapDictSectPfc {
 
     /// Total number of bytes this section occupies on disk, including the
     /// header, the sequence, the packed data, and the CRC32 trailer.
-    pub fn serialized_size_bytes(&self) -> usize {
+    pub const fn serialized_size_bytes(&self) -> usize {
         self.serialized_len
     }
 

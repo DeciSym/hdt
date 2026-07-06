@@ -101,7 +101,7 @@ impl RankIndex {
     }
 
     /// Number of 512-bit blocks this index covers.
-    pub fn num_blocks(&self) -> usize {
+    pub const fn num_blocks(&self) -> usize {
         self.num_blocks
     }
 
@@ -160,7 +160,7 @@ pub struct InMemoryBitmap {
 }
 
 impl InMemoryBitmap {
-    pub fn new(bitmap: crate::containers::Bitmap) -> Self {
+    pub const fn new(bitmap: crate::containers::Bitmap) -> Self {
         Self { inner: bitmap }
     }
 
@@ -168,7 +168,7 @@ impl InMemoryBitmap {
         self.inner
     }
 
-    pub fn inner(&self) -> &crate::containers::Bitmap {
+    pub const fn inner(&self) -> &crate::containers::Bitmap {
         &self.inner
     }
 }
@@ -422,7 +422,7 @@ impl MmapBitmap {
     /// the type byte, vbyte length, CRC8, the byte-aligned data and the
     /// trailing CRC32. Used by `new_hybrid_cache` to find the offset of the
     /// section that follows this bitmap in the cache file.
-    pub fn serialized_size_bytes(&self) -> usize {
+    pub const fn serialized_size_bytes(&self) -> usize {
         let data_size = bitmap_data_size_bytes(self.num_bits, self.num_words);
         // metadata + data + CRC32 trailer
         self.metadata_size + data_size + 4
@@ -627,7 +627,7 @@ impl BitmapAccess for MmapBitmap {
 
 /// Number of bytes the bitmap data occupies on disk for `num_bits` /
 /// `num_words`. The last word is byte-aligned.
-fn bitmap_data_size_bytes(num_bits: usize, num_words: usize) -> usize {
+const fn bitmap_data_size_bytes(num_bits: usize, num_words: usize) -> usize {
     if num_words == 0 {
         return 0;
     }

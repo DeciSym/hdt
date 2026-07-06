@@ -112,7 +112,7 @@ impl HdtAny {
         matches!(self, Self::Hybrid(_))
     }
 
-    pub fn header(&self) -> &Header {
+    pub const fn header(&self) -> &Header {
         match self {
             Self::Hybrid(h) => h.header(),
             Self::InMemory(h) => h.header(),

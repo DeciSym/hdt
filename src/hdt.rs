@@ -27,6 +27,9 @@ use std::sync::Arc;
 
 pub type Result<T> = core::result::Result<T, Error>;
 #[cfg(feature = "nt")]
+#[path = "concurrent_interner.rs"]
+mod concurrent_interner;
+#[cfg(feature = "nt")]
 #[path = "nt.rs"]
 /// Converting N-Triples to HDT, available only if HDT is built with the experimental `"nt"` feature.
 mod nt;
@@ -100,7 +103,7 @@ impl<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> HdtGeneric<D, S, 
     }
 
     /// Returns the HDT header.
-    pub fn header(&self) -> &Header {
+    pub const fn header(&self) -> &Header {
         &self.header
     }
 
@@ -108,7 +111,7 @@ impl<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> HdtGeneric<D, S, 
     ///
     /// Call [`Self::recompute_header_length`] after mutating the header body so the
     /// serialized header control information stays consistent.
-    pub fn header_mut(&mut self) -> &mut Header {
+    pub const fn header_mut(&mut self) -> &mut Header {
         &mut self.header
     }
 
@@ -300,8 +303,8 @@ impl Hdt {
     #[cfg(feature = "sophia")]
     pub fn write_nt(&self, write: &mut impl std::io::Write) -> std::io::Result<()> {
         use sophia::api::prelude::TripleSerializer;
-        use sophia::turtle::serializer::nt::NtSerializer;
-        NtSerializer::new(write).serialize_graph(self).map_err(|e| std::io::Error::other(format!("{e}")))?;
+        use sophia::turtle::serializer::nt::NTriplesSerializer;
+        NTriplesSerializer::new(write).serialize_graph(self).map_err(|e| std::io::Error::other(format!("{e}")))?;
         Ok(())
     }
 
@@ -843,8 +846,8 @@ pub mod tests {
         // Generate the HybridCache by tracking file positions
         let cache_name = format!("{}.{CACHE_EXT}", hdt_path.to_str().unwrap());
         println!("\nGenerating/loading HybridCache...");
-        let cache_size = std::fs::metadata(&cache_name).map(|m| m.len()).unwrap_or(0);
-        println!("  Cache size: {} bytes", cache_size);
+        let cache_size = std::fs::metadata(&cache_name).map_or(0, |m| m.len());
+        println!("  Cache size: {cache_size} bytes");
 
         // Test 2: Hdt::new_hybrid_cache() - hybrid/streaming
         println!("\nLoading with Hdt::new_hybrid_cache() (hybrid)...");

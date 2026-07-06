@@ -45,7 +45,7 @@ use bytesize::ByteSize;
 use fs2::FileExt;
 use log::debug;
 use log::warn;
-use mem_dbg::{MemSize, SizeFlags};
+use qwt::mem_dbg::{MemSize, SizeFlags};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fs::{File, OpenOptions};
@@ -805,7 +805,7 @@ mod tests {
         let (test_dir, hdt_path, cache_path) = setup_isolated_hdt("thread-name")?;
         let _ = std::fs::remove_file(&cache_path);
 
-        let handle = thread::Builder::new().name("hdt::cache::worker".to_string()).spawn({
+        let handle = thread::Builder::new().name("hdt::cache::worker".to_owned()).spawn({
             let path = hdt_path.clone();
             move || HybridCache::from_hdt_path(&path).map(|_| ())
         })?;

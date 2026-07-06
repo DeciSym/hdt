@@ -5,8 +5,8 @@ use crate::containers::{
 };
 use bytesize::ByteSize;
 use log::error;
-use mem_dbg::{MemSize, SizeFlags};
 use qwt::QWT512;
+use qwt::mem_dbg::{MemSize, SizeFlags};
 use qwt::{AccessUnsigned, BitVector, BitVectorMut, bitvector::rs_narrow::RSNarrow};
 use std::cmp::Ordering;
 use std::fmt;
@@ -360,7 +360,7 @@ impl<S: SequenceAccess, B: BitmapAccess> TriplesBitmapGeneric<S, B> {
     }
 
     /// Get the order of the triples
-    pub fn order(&self) -> &Order {
+    pub const fn order(&self) -> &Order {
         &self.order
     }
 }

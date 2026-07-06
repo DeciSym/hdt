@@ -34,8 +34,8 @@ impl<S: SequenceAccess, B: BitmapAccess> AdjListGeneric<S, B> {
         let s_len = sequence.len();
         // Skip the bitmap.len() invariant for empty inputs: the in-memory
         // QWT-backed Bitmap panics with subtract-overflow inside qwt's
-        // RSNarrow when it's empty (qwt 0.3.4 bug). Empty sequences are
-        // never the corruption mode we're trying to catch anyway.
+        // RSNarrow when it's empty (qwt bug, still present in 0.4). Empty
+        // sequences are never the corruption mode we're trying to catch anyway.
         if s_len > 0 {
             let b_len = bitmap.len();
             assert!(
