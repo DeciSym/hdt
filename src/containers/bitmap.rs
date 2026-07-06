@@ -1,7 +1,7 @@
 //! Bitmap with rank and select support read from an HDT file.
 use crate::containers::vbyte::{encode_vbyte, read_vbyte};
 use bytesize::ByteSize;
-use mem_dbg::{MemSize, SizeFlags};
+use qwt::mem_dbg::{MemSize, SizeFlags};
 use qwt::{AccessBin, BitVector, BitVectorMut, RankBin, SelectBin, bitvector::rs_narrow::RSNarrow};
 #[cfg(feature = "cache")]
 use serde::{Deserialize, Serialize};
@@ -54,13 +54,9 @@ impl From<BitVectorMut> for Bitmap {
 
 impl Bitmap {
     /// Construct a bitmap from an existing bitmap in form of a vector, which doesn't have rank and select support. Number of bits multiple of 64.
-    pub fn new(data: Vec<u64>) -> Self {
-        let mut v = BitVectorMut::new();
-        for d in data {
-            v.append_bits(d, 64);
-        }
-        let dict: BitVector = v.into();
-        Bitmap { dict: dict.into() }
+    pub fn new(data: &[u64]) -> Self {
+        let v: BitVector = BitVectorMut::from_packed_data(data, data.len() * 64).into();
+        Bitmap { dict: v.into() }
     }
 
     /// Size in bytes on the heap.
@@ -70,13 +66,13 @@ impl Bitmap {
 
     /// Number of bits in the bitmap, multiple of 64
     pub fn len(&self) -> usize {
-        self.dict.n_zeros() + self.dict.n_ones() // RSNarrow.len() is not public
+        self.dict.count_zeros() + self.dict.count_ones() // RSNarrow.len() is not public
         // self.dict.bv_len() // only on RSWide
     }
 
     /// Number of bits set
     pub fn num_ones(&self) -> usize {
-        self.dict.n_ones()
+        self.dict.count_ones()
     }
 
     /// Returns the position of the k-1-th one bit or None if there aren't that many.
@@ -165,7 +161,7 @@ impl Bitmap {
         if crc_calculated != crc_code {
             return Err(InvalidCrc32Checksum(crc_calculated, crc_code));
         }
-        Ok(Self::new(data))
+        Ok(Self::new(&data))
     }
 
     pub fn write(&self, w: &mut impl std::io::Write) -> Result<()> {
@@ -209,21 +205,20 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn bugtest() -> color_eyre::Result<()> {
+    fn bugtest() {
         let mut v = BitVectorMut::new();
         v.push(true);
         v.push(false);
         let bv: BitVector = v.into();
         let rs: RSNarrow = bv.into();
-        rs.n_zeros();
-        Ok(())
+        rs.count_zeros();
     }
 
     #[test]
     fn write() -> color_eyre::Result<()> {
         init();
         let bits: Vec<u64> = vec![0b10111];
-        let bitmap = Bitmap::new(bits);
+        let bitmap = Bitmap::new(&bits);
         assert_eq!(bitmap.len(), 64);
         // position of k-1th 1 bit
         // read bits from right to left, i.e. last one is pos 0

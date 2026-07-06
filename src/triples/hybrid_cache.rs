@@ -45,7 +45,7 @@ use bytesize::ByteSize;
 use fs2::FileExt;
 use log::debug;
 use log::warn;
-use mem_dbg::{MemSize, SizeFlags};
+use qwt::mem_dbg::{MemSize, SizeFlags};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::fs::{File, OpenOptions};
