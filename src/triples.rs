@@ -477,8 +477,13 @@ impl TriplesBitmap {
         Self { order, bitmap_y: InMemoryBitmap::new(bitmap_y), adjlist_z, op_index, wavelet_y }
     }
 
-    /// Creates a new TriplesBitmap from a list of sorted RDF triples
-    pub fn from_triples(triples: &[TripleId]) -> Self {
+    /// Creates a new TriplesBitmap from a list of sorted RDF triples.
+    ///
+    /// Takes the triples by value so the encoded-triple buffer (24 B ×
+    /// num_triples) can be freed as soon as the y/z arrays and bitmaps are
+    /// built, instead of staying resident through the memory-heavy op-index
+    /// construction in [`TriplesBitmap::new`].
+    pub fn from_triples(triples: Vec<TripleId>) -> Self {
         let mut y_bitmap = BitVectorMut::new();
         let mut z_bitmap = BitVectorMut::new();
         let mut array_y = Vec::new();
@@ -515,6 +520,10 @@ impl TriplesBitmap {
             last_y = y;
             last_z = z;
         }
+        // The encoded triples have been fully read into the y/z arrays and
+        // bitmaps; free them (~24 B × num_triples) before the op-index build
+        // peak in TriplesBitmap::new rather than holding them until return.
+        drop(triples);
         y_bitmap.push(true);
         let n = y_bitmap.len();
         y_bitmap.extend_with_zeros(n.div_ceil(64) * 64 - n);
@@ -523,6 +532,10 @@ impl TriplesBitmap {
         let bitmap_z = Bitmap::from(z_bitmap);
         let sequence_y = Sequence::new(&array_y);
         let sequence_z = Sequence::new(&array_z);
+        // The plain usize arrays are now redundant with the bit-packed
+        // sequences; free them (~8 B × len each) before the op-index build.
+        drop(array_y);
+        drop(array_z);
         let adjlist_z = AdjList::new(sequence_z, bitmap_z);
         TriplesBitmap::new(Order::SPO, &sequence_y, bitmap_y, adjlist_z)
     }
