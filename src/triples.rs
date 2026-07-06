@@ -5,8 +5,8 @@ use crate::containers::{
 };
 use bytesize::ByteSize;
 use log::error;
-use qwt::mem_dbg::{MemSize, SizeFlags};
 use qwt::QWT512;
+use qwt::mem_dbg::{MemSize, SizeFlags};
 use qwt::{AccessUnsigned, BitVector, BitVectorMut, bitvector::rs_narrow::RSNarrow};
 use std::cmp::Ordering;
 use std::fmt;

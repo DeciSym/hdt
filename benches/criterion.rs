@@ -2,7 +2,7 @@ use color_eyre::Result;
 use color_eyre::eyre::WrapErr;
 use criterion::{Criterion, criterion_group};
 use fs_err::{File, exists};
-use hdt::triples::{SubjectIter, PredicateIter, ObjectIter, PredicateObjectIter};
+use hdt::triples::{ObjectIter, PredicateIter, PredicateObjectIter, SubjectIter};
 use hdt::{Hdt, IdKind};
 use sophia::api::graph::Graph;
 use sophia::api::term::matcher::Any;

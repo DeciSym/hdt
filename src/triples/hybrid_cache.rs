@@ -805,12 +805,10 @@ mod tests {
         let (test_dir, hdt_path, cache_path) = setup_isolated_hdt("thread-name")?;
         let _ = std::fs::remove_file(&cache_path);
 
-        let handle = thread::Builder::new()
-            .name("hdt::cache::worker".to_owned())
-            .spawn({
-                let path = hdt_path.clone();
-                move || HybridCache::from_hdt_path(&path).map(|_| ())
-            })?;
+        let handle = thread::Builder::new().name("hdt::cache::worker".to_owned()).spawn({
+            let path = hdt_path.clone();
+            move || HybridCache::from_hdt_path(&path).map(|_| ())
+        })?;
 
         handle.join().map_err(|_| std::io::Error::other("hybrid cache worker thread panicked"))??;
 
