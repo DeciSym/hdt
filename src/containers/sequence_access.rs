@@ -111,7 +111,9 @@ pub enum MmapSequenceError {
     /// The serialized offset is larger than this platform's `usize`. On 32-bit
     /// targets this fires for any offset above `u32::MAX` (~4 GiB). On 64-bit
     /// it cannot fire — `u64::MAX as u64 == usize::MAX as u64`.
-    #[error("sequence offset {offset} exceeds platform usize::MAX ({usize_max}); this cache file requires a 64-bit target")]
+    #[error(
+        "sequence offset {offset} exceeds platform usize::MAX ({usize_max}); this cache file requires a 64-bit target"
+    )]
     OffsetTooLargeForPlatform { offset: u64, usize_max: u64 },
     #[error("unsupported sequence type {0}, expected 1 (Log64)")]
     UnsupportedType(u8),
@@ -199,7 +201,9 @@ impl MmapSequence {
         let data_offset = sequence_offset as usize + metadata_size;
         let data_size = sequence_data_size_bytes(entries, bits_per_entry);
         if data_offset.saturating_add(data_size) > mmap_len {
-            return Err(MmapSequenceError::DataPastEnd { offset: data_offset, needed: data_size, len: mmap_len }.into());
+            return Err(
+                MmapSequenceError::DataPastEnd { offset: data_offset, needed: data_size, len: mmap_len }.into()
+            );
         }
 
         Ok(Self { mmap, data_offset, entries, bits_per_entry, metadata_size })
@@ -289,12 +293,7 @@ impl MmapSequence {
 
 impl SequenceAccess for MmapSequence {
     fn get(&self, index: usize) -> usize {
-        assert!(
-            index < self.entries,
-            "index {} out of bounds for sequence of len {}",
-            index,
-            self.entries
-        );
+        assert!(index < self.entries, "index {} out of bounds for sequence of len {}", index, self.entries);
         self.read_value(index)
     }
 
@@ -322,7 +321,9 @@ const fn sequence_data_size_bytes(entries: usize, bits_per_entry: usize) -> usiz
     (entries * bits_per_entry).div_ceil(8)
 }
 
-fn read_one_byte<T: AsRef<[u8]>>(cursor: &mut std::io::Cursor<T>, base_offset: u64) -> Result<u8, MmapSequenceError> {
+fn read_one_byte<T: AsRef<[u8]>>(
+    cursor: &mut std::io::Cursor<T>, base_offset: u64,
+) -> Result<u8, MmapSequenceError> {
     use std::io::Read;
     let mut buf = [0u8];
     cursor.read_exact(&mut buf).map_err(|_| MmapSequenceError::Truncated(base_offset))?;

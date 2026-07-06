@@ -74,8 +74,8 @@ impl HdtAny {
     pub fn open_with_threshold(path: &Path, threshold: Option<usize>) -> Result<Self, Error> {
         let threshold = threshold.unwrap_or(DEFAULT_SMALL_FILE_THRESHOLD);
 
-        let size_below_threshold = std::fs::metadata(path)
-            .is_ok_and(|m| usize::try_from(m.len()).unwrap_or(usize::MAX) < threshold);
+        let size_below_threshold =
+            std::fs::metadata(path).is_ok_and(|m| usize::try_from(m.len()).unwrap_or(usize::MAX) < threshold);
 
         if size_below_threshold {
             log::debug!(
@@ -88,10 +88,7 @@ impl HdtAny {
         match Hdt::new_hybrid_cache(path) {
             Ok(h) => Ok(Self::Hybrid(h)),
             Err(e) if Self::is_hybrid_recoverable(&e) => {
-                log::warn!(
-                    "hybrid HDT load not viable for {}, falling back to in-memory: {e}",
-                    path.display()
-                );
+                log::warn!("hybrid HDT load not viable for {}, falling back to in-memory: {e}", path.display());
                 Ok(Self::InMemory(Self::read_in_memory(path)?))
             }
             Err(e) => Err(e),
@@ -170,9 +167,7 @@ impl HdtAny {
         }
     }
 
-    pub fn triple_ids_with_id_pattern(
-        &self, pattern: TripleId,
-    ) -> Box<dyn Iterator<Item = TripleId> + '_> {
+    pub fn triple_ids_with_id_pattern(&self, pattern: TripleId) -> Box<dyn Iterator<Item = TripleId> + '_> {
         match self {
             Self::Hybrid(h) => h.triple_ids_with_id_pattern(pattern),
             Self::InMemory(h) => h.triple_ids_with_id_pattern(pattern),

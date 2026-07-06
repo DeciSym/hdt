@@ -197,10 +197,7 @@ impl FourSectDict {
     /// and the four section offsets recorded in the cache.
     #[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
     pub fn from_mmap(
-        mmap: Arc<memmap2::Mmap>,
-        shared_offset: u64,
-        subject_offset: u64,
-        predicate_offset: u64,
+        mmap: Arc<memmap2::Mmap>, shared_offset: u64, subject_offset: u64, predicate_offset: u64,
         object_offset: u64,
     ) -> Result<FourSectDictMmap> {
         use crate::four_sect_dict::SectKind::*;

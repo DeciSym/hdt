@@ -409,13 +409,13 @@ fn build_op_index_from_entries(mut entries: Vec<(u32, u32, u32)>) -> (Vec<u32>, 
 impl TriplesBitmap {
     /// Builds the necessary indexes and constructs TriplesBitmap.
     pub fn new(order: Order, sequence_y: &Sequence, bitmap_y: Bitmap, adjlist_z: AdjList) -> Self {
+        use rayon::prelude::*;
         let wavelet_y = WT::from_iter(sequence_y);
 
         let entries = adjlist_z.sequence.entries;
         // Collect (object, predicate, pos_y) tuples for the op-index build.
         // Each iteration does one sequence.get + one bitmap.rank + one wavelet.get;
         // all are read-only so we parallelize with rayon for ~6-8× speedup.
-        use rayon::prelude::*;
         let pairs: Vec<(u32, u32, u32)> = (0..entries)
             .into_par_iter()
             .filter_map(|pos_z| {
@@ -439,28 +439,17 @@ impl TriplesBitmap {
         let op_index = OpIndexGeneric::new(op_index_sequence, InMemoryBitmap::new(bitmap_index));
 
         // Wrap adjlist_z components in generic wrappers
-        let adjlist_z_generic = AdjListGeneric::new(
-            InMemorySequence::new(adjlist_z.sequence),
-            InMemoryBitmap::new(adjlist_z.bitmap),
-        );
+        let adjlist_z_generic =
+            AdjListGeneric::new(InMemorySequence::new(adjlist_z.sequence), InMemoryBitmap::new(adjlist_z.bitmap));
 
-        Self {
-            order,
-            bitmap_y: InMemoryBitmap::new(bitmap_y),
-            adjlist_z: adjlist_z_generic,
-            op_index,
-            wavelet_y,
-        }
+        Self { order, bitmap_y: InMemoryBitmap::new(bitmap_y), adjlist_z: adjlist_z_generic, op_index, wavelet_y }
     }
 
     /// Creates a TriplesBitmap from cached components.
     /// The wavelet_y is provided from cache, and the op_index is rebuilt.
     #[cfg(feature = "cache")]
     pub fn from_cache(
-        order: Order,
-        bitmap_y: Bitmap,
-        adjlist_z: AdjListGeneric<InMemorySequence, InMemoryBitmap>,
-        wavelet_y: WT,
+        order: Order, bitmap_y: Bitmap, adjlist_z: AdjListGeneric<InMemorySequence, InMemoryBitmap>, wavelet_y: WT,
     ) -> Self {
         use rayon::prelude::*;
         let entries = adjlist_z.sequence.len();
@@ -485,13 +474,7 @@ impl TriplesBitmap {
         let op_index_sequence = InMemorySequence::new(Sequence::new_from_u32(&cv));
         let op_index = OpIndexGeneric::new(op_index_sequence, InMemoryBitmap::new(bitmap_index));
 
-        Self {
-            order,
-            bitmap_y: InMemoryBitmap::new(bitmap_y),
-            adjlist_z,
-            op_index,
-            wavelet_y,
-        }
+        Self { order, bitmap_y: InMemoryBitmap::new(bitmap_y), adjlist_z, op_index, wavelet_y }
     }
 
     /// Creates a new TriplesBitmap from a list of sorted RDF triples
@@ -624,11 +607,7 @@ mod tests {
     use std::io::BufReader;
 
     /// Iterator over all triples with a given ID in the specified position (subject, predicate or object).
-    fn triples_with_id<'a>(
-        t: &'a TriplesBitmap,
-        id: usize,
-        k: IdKind,
-    ) -> Box<dyn Iterator<Item = TripleId> + 'a> {
+    fn triples_with_id<'a>(t: &'a TriplesBitmap, id: usize, k: IdKind) -> Box<dyn Iterator<Item = TripleId> + 'a> {
         match k {
             IdKind::Subject => Box::new(SubjectIter::with_s(t, id)),
             IdKind::Predicate => Box::new(PredicateIter::new(t, id)),
@@ -658,7 +637,8 @@ mod tests {
             for i in 1..=lens[j] {
                 filtered = v.iter().filter(|tid| funs[j](**tid) == i).copied().collect();
                 filtered.sort_unstable();
-                let mut triples_with_id = triples_with_id(&triples, i, IdKind::KINDS[j]).collect::<Vec<TripleId>>();
+                let mut triples_with_id =
+                    triples_with_id(&triples, i, IdKind::KINDS[j]).collect::<Vec<TripleId>>();
                 triples_with_id.sort_unstable();
                 assert_eq!(filtered, triples_with_id, "triples_with({},{:?})", i, IdKind::KINDS[j]);
             }

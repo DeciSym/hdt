@@ -119,10 +119,8 @@ pub type HybridCacheResult<T> = core::result::Result<T, HybridCacheError>;
 /// Canonicalize the HDT path so that two callers that reach the same file
 /// via different relative paths still hash to the same lock file.
 fn canonical_hdt_path(path: &Path) -> HybridCacheResult<PathBuf> {
-    path.canonicalize().map_err(|source| HybridCacheError::Canonicalize {
-        path: path.display().to_string(),
-        source,
-    })
+    path.canonicalize()
+        .map_err(|source| HybridCacheError::Canonicalize { path: path.display().to_string(), source })
 }
 
 /// Build the path of the lock file used to serialize cache generation for
@@ -143,17 +141,10 @@ fn cache_lock_file_path(canonical_hdt_path: &Path) -> HybridCacheResult<PathBuf>
 
 fn open_cache_lock_file(canonical_hdt_path: &Path) -> HybridCacheResult<(File, PathBuf)> {
     let lock_path = cache_lock_file_path(canonical_hdt_path)?;
-    let lock_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|source| HybridCacheError::Lock {
-            op: "open",
-            path: lock_path.display().to_string(),
-            source,
-        })?;
+    let lock_file =
+        OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&lock_path).map_err(
+            |source| HybridCacheError::Lock { op: "open", path: lock_path.display().to_string(), source },
+        )?;
     Ok((lock_file, lock_path))
 }
 
@@ -282,39 +273,23 @@ impl fmt::Debug for HybridCache {
 impl HybridCache {
     /// Get the triple ordering from cache metadata
     pub fn order(&self) -> HybridCacheResult<Order> {
-        let value = self
-            .control_info
-            .get("order")
-            .ok_or(HybridCacheError::MissingProperty("order"))?;
+        let value = self.control_info.get("order").ok_or(HybridCacheError::MissingProperty("order"))?;
         let parsed = value
             .parse::<u8>()
             .map_err(|_| HybridCacheError::InvalidProperty { key: "order", value: value.clone() })?;
-        Order::try_from(parsed as u32).map_err(|_| HybridCacheError::InvalidProperty {
-            key: "order",
-            value,
-        })
+        Order::try_from(parsed as u32).map_err(|_| HybridCacheError::InvalidProperty { key: "order", value })
     }
 
     /// Get the number of triples from cache metadata
     pub fn num_triples(&self) -> HybridCacheResult<usize> {
-        let value = self
-            .control_info
-            .get("numTriples")
-            .ok_or(HybridCacheError::MissingProperty("numTriples"))?;
-        value
-            .parse::<usize>()
-            .map_err(|_| HybridCacheError::InvalidProperty { key: "numTriples", value })
+        let value = self.control_info.get("numTriples").ok_or(HybridCacheError::MissingProperty("numTriples"))?;
+        value.parse::<usize>().map_err(|_| HybridCacheError::InvalidProperty { key: "numTriples", value })
     }
 
     /// Get the header size from cache metadata
     pub fn header_size(&self) -> HybridCacheResult<u64> {
-        let value = self
-            .control_info
-            .get("headerSize")
-            .ok_or(HybridCacheError::MissingProperty("headerSize"))?;
-        value
-            .parse::<u64>()
-            .map_err(|_| HybridCacheError::InvalidProperty { key: "headerSize", value })
+        let value = self.control_info.get("headerSize").ok_or(HybridCacheError::MissingProperty("headerSize"))?;
+        value.parse::<u64>().map_err(|_| HybridCacheError::InvalidProperty { key: "headerSize", value })
     }
 }
 
@@ -475,9 +450,7 @@ impl HybridCache {
         let sequence_z_offset = reader.stream_position()?;
         let sequence_z = Sequence::read(&mut reader)?;
 
-        let order_value = triples_ci
-            .get("order")
-            .ok_or(HybridCacheError::MissingProperty("order"))?;
+        let order_value = triples_ci.get("order").ok_or(HybridCacheError::MissingProperty("order"))?;
         let order_num = order_value
             .parse::<u32>()
             .map_err(|_| HybridCacheError::InvalidProperty { key: "order", value: order_value.clone() })?;
@@ -516,7 +489,11 @@ impl HybridCache {
         control_info.write(&mut writer)?;
 
         // Write wavelet_y using bincode
-        bincode::serde::encode_into_std_write(&triples_bitmap.wavelet_y, &mut writer, bincode::config::standard())?;
+        bincode::serde::encode_into_std_write(
+            &triples_bitmap.wavelet_y,
+            &mut writer,
+            bincode::config::standard(),
+        )?;
 
         // Write all HDT file offsets
         writer.write_all(&bitmap_y_offset.to_le_bytes())?;
@@ -532,7 +509,8 @@ impl HybridCache {
         // Build rank indices for all three bitmaps. Each call pops through
         // the u64 words of the bitmap once, so total cost is ~3 sequential
         // scans — far smaller than the wavelet build that already ran.
-        let bitmap_y_rank_index_words = build_rank_index(triples_bitmap.bitmap_y.inner().dict.bit_vector().words());
+        let bitmap_y_rank_index_words =
+            build_rank_index(triples_bitmap.bitmap_y.inner().dict.bit_vector().words());
         let bitmap_z_rank_index_words =
             build_rank_index(triples_bitmap.adjlist_z.bitmap.inner().dict.bit_vector().words());
         let op_index_bitmap_rank_index_words =
@@ -597,12 +575,10 @@ impl HybridCache {
         tmp_cache.as_file().sync_all()?;
 
         // Atomic publish: persist the temp file onto the final cache path.
-        tmp_cache.persist(&cache_path).map_err(|error| {
-            HybridCacheError::Rename {
-                tmp: tmp_cache_path.display().to_string(),
-                final_path: cache_path.display().to_string(),
-                source: error.error,
-            }
+        tmp_cache.persist(&cache_path).map_err(|error| HybridCacheError::Rename {
+            tmp: tmp_cache_path.display().to_string(),
+            final_path: cache_path.display().to_string(),
+            source: error.error,
         })?;
 
         // Create and return the cache structure
@@ -836,9 +812,7 @@ mod tests {
                 move || HybridCache::from_hdt_path(&path).map(|_| ())
             })?;
 
-        handle
-            .join()
-            .map_err(|_| std::io::Error::other("hybrid cache worker thread panicked"))??;
+        handle.join().map_err(|_| std::io::Error::other("hybrid cache worker thread panicked"))??;
 
         assert!(cache_path.exists(), "cache should exist after named-thread load");
         std::fs::remove_dir_all(test_dir)?;
