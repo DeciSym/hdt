@@ -37,7 +37,7 @@ pub struct InMemorySequence {
 }
 
 impl InMemorySequence {
-    pub fn new(sequence: crate::containers::Sequence) -> Self {
+    pub const fn new(sequence: crate::containers::Sequence) -> Self {
         Self { inner: sequence }
     }
 
@@ -45,7 +45,7 @@ impl InMemorySequence {
         self.inner
     }
 
-    pub fn inner(&self) -> &crate::containers::Sequence {
+    pub const fn inner(&self) -> &crate::containers::Sequence {
         &self.inner
     }
 }
@@ -252,7 +252,7 @@ impl MmapSequence {
     /// (type + bits + vbyte(entries) + CRC8) + byte-aligned packed data +
     /// CRC32 trailer. Used by callers that need to find the offset of the
     /// next section in a cache file.
-    pub fn serialized_size_bytes(&self) -> usize {
+    pub const fn serialized_size_bytes(&self) -> usize {
         let data_size = sequence_data_size_bytes(self.entries, self.bits_per_entry);
         // metadata + data + CRC32 trailer
         self.metadata_size + data_size + 4
@@ -315,7 +315,7 @@ impl SequenceAccess for MmapSequence {
 
 /// Number of bytes that `entries * bits_per_entry` bits occupy on disk
 /// (byte-aligned).
-fn sequence_data_size_bytes(entries: usize, bits_per_entry: usize) -> usize {
+const fn sequence_data_size_bytes(entries: usize, bits_per_entry: usize) -> usize {
     if entries == 0 || bits_per_entry == 0 {
         return 0;
     }

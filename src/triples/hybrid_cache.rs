@@ -830,7 +830,7 @@ mod tests {
         let _ = std::fs::remove_file(&cache_path);
 
         let handle = thread::Builder::new()
-            .name("hdt::cache::worker".to_string())
+            .name("hdt::cache::worker".to_owned())
             .spawn({
                 let path = hdt_path.clone();
                 move || HybridCache::from_hdt_path(&path).map(|_| ())

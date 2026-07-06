@@ -360,7 +360,7 @@ impl<S: SequenceAccess, B: BitmapAccess> TriplesBitmapGeneric<S, B> {
     }
 
     /// Get the order of the triples
-    pub fn order(&self) -> &Order {
+    pub const fn order(&self) -> &Order {
         &self.order
     }
 }

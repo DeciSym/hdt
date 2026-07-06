@@ -581,7 +581,7 @@ impl MmapDictSectPfc {
 
     /// Total number of bytes this section occupies on disk, including the
     /// header, the sequence, the packed data, and the CRC32 trailer.
-    pub fn serialized_size_bytes(&self) -> usize {
+    pub const fn serialized_size_bytes(&self) -> usize {
         self.serialized_len
     }
 

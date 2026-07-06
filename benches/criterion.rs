@@ -2,7 +2,7 @@ use color_eyre::Result;
 use color_eyre::eyre::WrapErr;
 use criterion::{Criterion, criterion_group};
 use fs_err::{File, exists};
-use hdt::triples::*;
+use hdt::triples::{SubjectIter, PredicateIter, ObjectIter, PredicateObjectIter};
 use hdt::{Hdt, IdKind};
 use sophia::api::graph::Graph;
 use sophia::api::term::matcher::Any;
@@ -44,47 +44,47 @@ fn query(c: &mut Criterion) {
     let mut group = c.benchmark_group("S??");
     //let mut group = c.benchmark_group("query");
     group.bench_function("1.1 (vincent, ?, ?) triple IDs", |b| {
-        b.iter(|| SubjectIter::with_pattern(triples, [vincent_id, 0, 0]).count())
+        b.iter(|| SubjectIter::with_pattern(triples, [vincent_id, 0, 0]).count());
     });
     group.bench_function("1.2 (vincent, ?, ?) str triples", |b| b.iter(|| twp(Some(VINCENT), None, None).count()));
     group.bench_function("1.3 (vincent, ?, ?) Sophia triples", |b| {
-        b.iter(|| hdt.triples_matching(Some(&vincent_term), Any, Any).count())
+        b.iter(|| hdt.triples_matching(Some(&vincent_term), Any, Any).count());
     });
     group.finish();
 
     let mut group = c.benchmark_group(format!("?P? {} triples", PredicateIter::new(triples, type_id).count()));
     group.sample_size(10);
     group.bench_function("2.1 (?, type, ?) triple IDs", |b| {
-        b.iter(|| PredicateIter::new(triples, type_id).count())
+        b.iter(|| PredicateIter::new(triples, type_id).count());
     });
     group.bench_function("2.2 (?, type, ?) str triples", |b| b.iter(|| twp(None, Some(TYPE), None).count()));
     group.bench_function("2.3 (?, type, ?) Sophia triples", |b| {
-        b.iter(|| hdt.triples_matching(Any, Some(&type_term), Any).count())
+        b.iter(|| hdt.triples_matching(Any, Some(&type_term), Any).count());
     });
     group.finish();
     let mut group = c.benchmark_group(format!("??O {} triples", ObjectIter::new(triples, person_id).count()));
     group.bench_function("3.1 (?, ?, person) triple IDs", |b| {
-        b.iter(|| ObjectIter::new(triples, person_id).count())
+        b.iter(|| ObjectIter::new(triples, person_id).count());
     });
     group.bench_function("3.2 (?, ?, person) str triples", |b| b.iter(|| twp(None, None, Some(PERSON)).count()));
     group.bench_function("3.3 (?, ?, person) Sophia triples", |b| {
-        b.iter(|| hdt.triples_matching(Any, Any, Some(&person_term)).count())
+        b.iter(|| hdt.triples_matching(Any, Any, Some(&person_term)).count());
     });
     group.finish();
     let mut group = c
         .benchmark_group(format!("?PO {} triples", PredicateObjectIter::new(triples, type_id, person_id).count()));
     group.sample_size(10);
     group.bench_function("4.1 (?, type, person) triple IDs", |b| {
-        b.iter(|| PredicateObjectIter::new(triples, type_id, person_id).count())
+        b.iter(|| PredicateObjectIter::new(triples, type_id, person_id).count());
     });
     group.bench_function("4.2 (?, type, person) str subjects", |b| {
-        b.iter(|| hdt.subjects_with_po(TYPE, PERSON).count())
+        b.iter(|| hdt.subjects_with_po(TYPE, PERSON).count());
     });
     group.bench_function("4.3 (?, type, person) str triples", |b| {
-        b.iter(|| twp(None, Some(TYPE), Some(PERSON)).count())
+        b.iter(|| twp(None, Some(TYPE), Some(PERSON)).count());
     });
     group.bench_function("4.4 (?, type, person) Sophia triples", |b| {
-        b.iter(|| hdt.triples_matching(Any, Some(&type_term), Some(&person_term)).count())
+        b.iter(|| hdt.triples_matching(Any, Some(&type_term), Some(&person_term)).count());
     });
     group.finish();
 }
@@ -106,7 +106,7 @@ fn read_hdt_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("read_hdt");
     group.sample_size(10);
 
-    group.bench_function("read_hdt_uncached", |b| b.iter(|| load()));
+    group.bench_function("read_hdt_uncached", |b| b.iter(load));
     #[cfg(feature = "cache")]
     {
         let c = format!("{H}.{}", hdt::triples::CACHE_EXT);

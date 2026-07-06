@@ -101,7 +101,7 @@ impl<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> HdtGeneric<D, S, 
     }
 
     /// Returns the HDT header.
-    pub fn header(&self) -> &Header {
+    pub const fn header(&self) -> &Header {
         &self.header
     }
 
@@ -109,7 +109,7 @@ impl<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> HdtGeneric<D, S, 
     ///
     /// Call [`Self::recompute_header_length`] after mutating the header body so the
     /// serialized header control information stays consistent.
-    pub fn header_mut(&mut self) -> &mut Header {
+    pub const fn header_mut(&mut self) -> &mut Header {
         &mut self.header
     }
 
@@ -844,8 +844,8 @@ pub mod tests {
         // Generate the HybridCache by tracking file positions
         let cache_name = format!("{}.{CACHE_EXT}", hdt_path.to_str().unwrap());
         println!("\nGenerating/loading HybridCache...");
-        let cache_size = std::fs::metadata(&cache_name).map(|m| m.len()).unwrap_or(0);
-        println!("  Cache size: {} bytes", cache_size);
+        let cache_size = std::fs::metadata(&cache_name).map_or(0, |m| m.len());
+        println!("  Cache size: {cache_size} bytes");
 
         // Test 2: Hdt::new_hybrid_cache() - hybrid/streaming
         println!("\nLoading with Hdt::new_hybrid_cache() (hybrid)...");

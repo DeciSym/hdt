@@ -164,7 +164,7 @@ fn main() -> Result<(), Report> {
                         "Output file has no extension or one signifying an unsupported export format, aborting."
                     );
                 }
-            };
+            }
             let in_size = ByteSize(metadata(&input_path)?.len());
             let out_size = ByteSize(metadata(&output_path)?.len());
             println!(
