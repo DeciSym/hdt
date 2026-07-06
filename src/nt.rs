@@ -252,7 +252,7 @@ fn parse_nt_terms(path: &Path) -> Result<ParsedTerms> {
                         s.pop();
                     }
                 };
-                let q = q.unwrap(); // TODO: error handling
+                let q = q.map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 let mut subj_str = q.subject.to_string();
                 clean(&mut subj_str);
                 let mut pred_str = q.predicate.to_string();
@@ -264,10 +264,10 @@ fn parse_nt_terms(path: &Path) -> Result<ParsedTerms> {
                 let p = interner.get_or_intern(&pred_str);
                 let o = interner.get_or_intern(&obj_str);
 
-                [s, p, o]
+                Ok([s, p, o])
             })
         })
-        .collect();
+        .collect::<Result<Vec<[u32; 3]>>>()?;
 
     let interner = Arc::try_unwrap(interner).expect("interner Arc still has outstanding references");
     Ok(ParsedTerms::new(interner, triples))
