@@ -20,10 +20,11 @@ enum HdtMatcher {
     Other,
 }
 
-fn id_term(hdt: &Hdt, id: Id, kind: IdKind) -> HdtTerm {
-    auto_term(&hdt.dict.id_to_string(id, kind).unwrap()).unwrap()
-    // TODO: optimize by excluding cases depending on the id kind
-    //IriRef::new_unchecked(MownStr::from(s)).into_term()
+fn id_term(hdt: &Hdt, id: Id, kind: IdKind, buf: &mut Vec<u8>) -> HdtTerm {
+    // Decode into the reused scratch buffer and parse straight into an HdtTerm, so the only
+    // allocations are the term's own Arcs — no throwaway String/Arc per call (Tier 1).
+    hdt.dict.id_into_buf(id, kind, buf).unwrap();
+    auto_term(std::str::from_utf8(buf.as_slice()).unwrap()).unwrap()
 }
 
 /// Transforms a Sophia TermMatcher to a constant HdtTerm and Id if possible.
@@ -151,43 +152,56 @@ impl Graph for Hdt {
         let Some(xpo) = unpack_matcher(self, &pm, IdKind::Predicate) else { return Box::new(iter::empty()) };
         let Some(xoo) = unpack_matcher(self, &om, IdKind::Object) else { return Box::new(iter::empty()) };
         // TODO: improve error handling
+        // reused scratch buffer so decoding a term's dictionary string into an HdtTerm allocates
+        // only the term's own Arcs — no throwaway String/Arc per term (Tier 1).
+        let mut buf = Vec::new();
         match (xso, xpo, xoo) {
             //if SubjectIter::with_pattern(&self.triples, [s.1, p.1, o.1]).next().is_some() { // always true
             (Constant(s), Constant(p), Constant(o)) => Box::new(iter::once(Ok([s.0, p.0, o.0]))),
             (Constant(s), Constant(p), Other) => Box::new(
                 SubjectIter::with_pattern(&self.triples, [s.1, p.1, 0])
-                    .map(|tid| auto_term(&self.dict.id_to_string(tid[2], IdKind::Object).unwrap()).unwrap())
+                    .map(move |tid| id_term(self, tid[2], IdKind::Object, &mut buf))
                     .filter(move |term| om.matches(term))
                     .map(move |term| Ok([s.0.clone(), p.0.clone(), term])),
             ),
             (Constant(s), Other, Constant(o)) => Box::new(
                 SubjectIter::with_pattern(&self.triples, [s.1, 0, o.1])
-                    .map(|t| id_term(self, t[1], IdKind::Predicate))
+                    .map(move |t| id_term(self, t[1], IdKind::Predicate, &mut buf))
                     .filter(move |term| pm.matches(term))
                     .map(move |term| Ok([s.0.clone(), term, o.0.clone()])),
             ),
             (Constant(s), Other, Other) => Box::new(
                 SubjectIter::with_pattern(&self.triples, [s.1, 0, 0])
-                    .map(move |t| [id_term(self, t[1], IdKind::Predicate), id_term(self, t[2], IdKind::Object)])
+                    .map(move |t| {
+                        [
+                            id_term(self, t[1], IdKind::Predicate, &mut buf),
+                            id_term(self, t[2], IdKind::Object, &mut buf),
+                        ]
+                    })
                     .filter(move |[pt, ot]| pm.matches(pt) && om.matches(ot))
                     .map(move |[pt, ot]| Ok([s.0.clone(), pt, ot])),
             ),
             (Other, Constant(p), Constant(o)) => Box::new(
                 PredicateObjectIter::new(&self.triples, p.1, o.1)
-                    .map(|sid| id_term(self, sid, IdKind::Subject))
+                    .map(move |sid| id_term(self, sid, IdKind::Subject, &mut buf))
                     .filter(move |term| sm.matches(term))
                     .map(move |term| Ok([term, p.0.clone(), o.0.clone()])),
             ),
             (Other, Constant(p), Other) => Box::new(
                 PredicateIter::new(&self.triples, p.1)
-                    .map(move |t| [id_term(self, t[0], IdKind::Subject), id_term(self, t[2], IdKind::Object)])
+                    .map(move |t| {
+                        [
+                            id_term(self, t[0], IdKind::Subject, &mut buf),
+                            id_term(self, t[2], IdKind::Object, &mut buf),
+                        ]
+                    })
                     .filter(move |[st, ot]| sm.matches(st) && om.matches(ot))
                     .map(move |[st, ot]| Ok([st, p.0.clone(), ot])),
             ),
             (Other, Other, Constant(o)) => Box::new(ObjectIter::new(&self.triples, o.1).map(move |t| {
                 Ok([
-                    auto_term(&Arc::from(self.dict.id_to_string(t[0], IdKind::Subject).unwrap())).unwrap(),
-                    id_term(self, t[1], IdKind::Predicate),
+                    id_term(self, t[0], IdKind::Subject, &mut buf),
+                    id_term(self, t[1], IdKind::Predicate, &mut buf),
                     o.0.clone(),
                 ])
             })),

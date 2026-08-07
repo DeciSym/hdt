@@ -33,6 +33,33 @@ pub trait DictSectPfcAccess: fmt::Debug + Send + Sync {
 
     /// Extract the string with the given ID (1-indexed)
     fn extract(&self, id: Id) -> core::result::Result<String, ExtractError>;
+
+    /// Decode the string with the given ID into `buf`, which is cleared first and left holding the
+    /// raw (not yet UTF-8 validated) bytes. Reusing a caller-owned scratch buffer across many
+    /// extractions avoids the per-call `Vec`/`String` allocation that [`extract`](Self::extract)
+    /// incurs. The default routes through `extract`; implementations that can decode straight into
+    /// a buffer should override it.
+    fn extract_into(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<(), ExtractError> {
+        let s = self.extract(id)?;
+        buf.clear();
+        buf.extend_from_slice(s.as_bytes());
+        Ok(())
+    }
+
+    /// Extract the string with the given ID directly into an `Arc<str>`, using `buf` as reusable
+    /// decompression scratch. Performs a single heap allocation (the `Arc`) instead of the
+    /// `Vec` -> `String` -> `Arc` chain of `extract(id)?.into()`.
+    fn extract_arc(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<Arc<str>, ExtractError> {
+        self.extract_into(id, buf)?;
+        match str::from_utf8(buf.as_slice()) {
+            Ok(s) => Ok(Arc::from(s)),
+            Err(e) => Err(ExtractError::InvalidUtf8 {
+                source: e,
+                data: buf.clone(),
+                recovered: String::from_utf8_lossy(buf.as_slice()).into_owned(),
+            }),
+        }
+    }
 }
 
 /// In-memory dictionary section with plain front coding.
@@ -207,6 +234,10 @@ impl DictSectPFC {
     }
 
     /// extract the string with the given ID between 1 and self.num_strings (inclusive) from the dictionary
+    /// Kept as a standalone decode rather than delegating to [`extract_into`](Self::extract_into),
+    /// for the same reason as the memory-mapped section: routing the `String` path through the
+    /// `&mut Vec` out-parameter measured slower on `subjects_with_po`. `extract_into` backs the
+    /// allocation-free `Arc` path instead.
     pub fn extract(&self, id: Id) -> core::result::Result<String, ExtractError> {
         if id as usize > self.num_strings {
             return Err(ExtractError::IdOutOfBounds { id, len: self.num_strings });
@@ -216,7 +247,6 @@ impl DictSectPFC {
         let mut position = self.sequence.get(block_index);
         let mut slen = self.strlen(position);
         let mut string: Vec<u8> = self.packed_data[position..position + slen].to_vec();
-        //println!("block_index={} string_index={}, string={}", block_index, string_index, str::from_utf8(&string).unwrap());
         // loop takes around nearly half the time of the function
         for _ in 0..string_index {
             position += slen + 1;
@@ -233,6 +263,47 @@ impl DictSectPFC {
                 source: e,
                 data: string.clone(),
                 recovered: String::from_utf8_lossy(&string).into_owned(),
+            }),
+        }
+    }
+
+    /// Decode the front-coded string with the given ID into `buf`, which is cleared first and
+    /// left holding the raw (not yet UTF-8 validated) bytes. Reusing a caller-owned scratch
+    /// buffer across many extractions avoids the per-call `Vec`/`String` allocation that
+    /// [`extract`](Self::extract) incurs.
+    pub(crate) fn extract_into(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<(), ExtractError> {
+        if id as usize > self.num_strings {
+            return Err(ExtractError::IdOutOfBounds { id, len: self.num_strings });
+        }
+        buf.clear();
+        let block_index = id.saturating_sub(1) as usize / self.block_size;
+        let string_index = id.saturating_sub(1) as usize % self.block_size;
+        let mut position = self.sequence.get(block_index);
+        let mut slen = self.strlen(position);
+        buf.extend_from_slice(&self.packed_data[position..position + slen]);
+        // loop takes around nearly half the time of the function
+        for _ in 0..string_index {
+            position += slen + 1;
+            let (delta, vbyte_bytes) = decode_vbyte_delta(&self.packed_data, position);
+            position += vbyte_bytes;
+            slen = self.strlen(position);
+            buf.truncate(delta);
+            buf.extend_from_slice(&self.packed_data[position..position + slen]);
+        }
+        Ok(())
+    }
+
+    /// Extract the string with the given ID directly into an `Arc<str>`, using `buf` as reusable
+    /// decompression scratch. Performs a single heap allocation (the `Arc`) instead of the
+    /// `Vec` → `String` → `Arc` chain of `extract(id)?.into()`.
+    pub fn extract_arc(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<Arc<str>, ExtractError> {
+        self.extract_into(id, buf)?;
+        match str::from_utf8(buf.as_slice()) {
+            Ok(s) => Ok(Arc::from(s)),
+            Err(e) => Err(ExtractError::InvalidUtf8 {
+                source: e,
+                data: buf.clone(),
+                recovered: String::from_utf8_lossy(buf.as_slice()).into_owned(),
             }),
         }
     }
@@ -438,6 +509,14 @@ impl DictSectPfcAccess for DictSectPFC {
 
     fn extract(&self, id: Id) -> core::result::Result<String, ExtractError> {
         DictSectPFC::extract(self, id)
+    }
+
+    fn extract_into(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<(), ExtractError> {
+        DictSectPFC::extract_into(self, id, buf)
+    }
+
+    fn extract_arc(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<Arc<str>, ExtractError> {
+        DictSectPFC::extract_arc(self, id, buf)
     }
 }
 
@@ -744,6 +823,10 @@ impl DictSectPfcAccess for MmapDictSectPfc {
         ((mid * self.block_size) + idblock + 1) as Id
     }
 
+    // Kept as a standalone decode rather than delegating to `extract_into`: routing the
+    // String path through the shared `&mut Vec` out-parameter measured ~3% slower on
+    // `subjects_with_po`, since the local buffer no longer stays in registers across the
+    // truncate/extend loop. `extract_into` still backs the allocation-free `Arc` path.
     fn extract(&self, id: Id) -> core::result::Result<String, ExtractError> {
         if id as usize > self.num_strings {
             return Err(ExtractError::IdOutOfBounds { id, len: self.num_strings });
@@ -772,6 +855,29 @@ impl DictSectPfcAccess for MmapDictSectPfc {
                 recovered: String::from_utf8_lossy(&string).into_owned(),
             }),
         }
+    }
+
+    fn extract_into(&self, id: Id, buf: &mut Vec<u8>) -> core::result::Result<(), ExtractError> {
+        if id as usize > self.num_strings {
+            return Err(ExtractError::IdOutOfBounds { id, len: self.num_strings });
+        }
+        buf.clear();
+        let data = self.packed_data();
+        let block_index = id.saturating_sub(1) as usize / self.block_size;
+        let string_index = id.saturating_sub(1) as usize % self.block_size;
+        let mut position = self.sequence.get(block_index);
+        let mut slen = self.strlen(position);
+        buf.extend_from_slice(&data[position..position + slen]);
+
+        for _ in 0..string_index {
+            position += slen + 1;
+            let (delta, vbyte_bytes) = decode_vbyte_delta(data, position);
+            position += vbyte_bytes;
+            slen = self.strlen(position);
+            buf.truncate(delta);
+            buf.extend_from_slice(&data[position..position + slen]);
+        }
+        Ok(())
     }
 }
 

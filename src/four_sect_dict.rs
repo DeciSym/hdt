@@ -5,7 +5,6 @@ use crate::dict_sect_pfc;
 use crate::triples::Id;
 use crate::{ControlInfo, DictSectPFC};
 use std::io::BufRead;
-#[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
 use std::sync::Arc;
 #[cfg(not(any(target_arch = "wasm32", target_arch = "wasm64")))]
 use std::thread::JoinHandle;
@@ -106,6 +105,25 @@ pub struct EncodedTripleId {
 impl<D: dict_sect_pfc::DictSectPfcAccess> FourSectDictGeneric<D> {
     /// Get the string value of a given ID of a given type.
     /// String representation of URIs, literals and blank nodes is defined in <https://www.w3.org/Submission/2011/SUBM-HDT-20110330/#dictionaryEncoding>>..
+    /// Resolve an ID and kind to the section holding it, the section-local ID, and the section
+    /// tag used in error messages. Shared by `id_to_string`, `id_to_arc` and `id_into_buf`.
+    #[inline]
+    fn section_for(&self, id: Id, id_kind: IdKind) -> (&D, Id, SectKind) {
+        use SectKind::*;
+        let shared_size = self.shared.num_strings() as Id;
+        match id_kind {
+            IdKind::Predicate => (&self.predicates, id, Predicate),
+            IdKind::Subject if id > shared_size => (&self.subjects, id - shared_size, Subject),
+            IdKind::Object if id > shared_size => (&self.objects, id - shared_size, Object),
+            // subjects and objects with id <= shared_size live in the shared section
+            _ => (&self.shared, id, Shared),
+        }
+    }
+
+    /// Deliberately dispatches per section instead of going through [`Self::section_for`]: the
+    /// merged call site costs ~3% on `subjects_with_po`, because the section pointer becomes a
+    /// runtime select and stops being hoistable out of the caller's loop. The buffer-based
+    /// extractors below don't show this, so they keep sharing `section_for`.
     pub fn id_to_string(&self, id: Id, id_kind: IdKind) -> core::result::Result<String, ExtractError> {
         use SectKind::*;
         let shared_size = self.shared.num_strings() as Id;
@@ -129,6 +147,27 @@ impl<D: dict_sect_pfc::DictSectPfcAccess> FourSectDictGeneric<D> {
                 }
             }
         }
+    }
+
+    /// Like [`id_to_string`](Self::id_to_string) but decodes directly into an `Arc<str>`, reusing
+    /// `buf` as decompression scratch. Building the `Arc` in a single allocation (instead of
+    /// `id_to_string(id, kind)?.into()`, which allocates a `Vec`, then a `String`, then the `Arc`)
+    /// is the hot-path saver for `triples_with_pattern` result materialization.
+    pub fn id_to_arc(
+        &self, id: Id, id_kind: IdKind, buf: &mut Vec<u8>,
+    ) -> core::result::Result<Arc<str>, ExtractError> {
+        let (sect, sid, sect_kind) = self.section_for(id, id_kind);
+        sect.extract_arc(sid, buf).map_err(|e| ExtractError { e, id, id_kind, sect_kind })
+    }
+
+    /// Like [`id_to_arc`](Self::id_to_arc) but leaves the decoded bytes in `buf` (cleared first)
+    /// instead of allocating a return value. Used by the Sophia `Graph` adapter, which parses the
+    /// bytes straight into a term and so never needs an intermediate `Arc`.
+    pub(crate) fn id_into_buf(
+        &self, id: Id, id_kind: IdKind, buf: &mut Vec<u8>,
+    ) -> core::result::Result<(), ExtractError> {
+        let (sect, sid, sect_kind) = self.section_for(id, id_kind);
+        sect.extract_into(sid, buf).map_err(|e| ExtractError { e, id, id_kind, sect_kind })
     }
 
     /// Get the ID for a given string or 0 if not found.

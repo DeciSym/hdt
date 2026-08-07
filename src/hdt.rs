@@ -190,12 +190,17 @@ impl<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> HdtGeneric<D, S, 
     pub fn triples_with_pattern<'a>(
         &'a self, sp: Option<&'a str>, pp: Option<&'a str>, op: Option<&'a str>,
     ) -> Box<dyn Iterator<Item = StringTriple> + 'a> {
-        let pattern: [Option<(Arc<str>, usize)>; 3] = [(0, sp), (1, pp), (2, op)]
-            .map(|(i, x)| x.map(|x| (Arc::from(x), self.dict.string_to_id(x, IdKind::KINDS[i]))));
+        // Resolve the constant terms to dictionary IDs first. Building the Arc<str> for each bound
+        // term is deferred until after this check so that a pattern naming a term absent from the
+        // graph returns the empty iterator without allocating any strings.
+        let ids: [Option<usize>; 3] =
+            [(0, sp), (1, pp), (2, op)].map(|(i, x)| x.map(|x| self.dict.string_to_id(x, IdKind::KINDS[i])));
         // at least one term does not exist in the graph
-        if pattern.iter().flatten().any(|x| x.1 == 0) {
+        if ids.iter().flatten().any(|&id| id == 0) {
             return Box::new(iter::empty());
         }
+        let pattern: [Option<(Arc<str>, usize)>; 3] =
+            [(0, sp), (1, pp), (2, op)].map(|(i, x)| x.map(|x| (Arc::from(x), ids[i].unwrap())));
         // TODO: improve error handling
         let mut cache = TripleCache::new(self);
         match pattern {
@@ -206,25 +211,22 @@ impl<D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> HdtGeneric<D, S, 
                     Box::new(iter::empty())
                 }
             }
-            [Some(s), Some(p), None] => {
-                Box::new(SubjectIter::with_pattern(&self.triples, [s.1, p.1, 0]).map(move |t| {
-                    [s.0.clone(), p.0.clone(), Arc::from(self.dict.id_to_string(t[2], IdKind::Object).unwrap())]
-                }))
-            }
-            [Some(s), None, Some(o)] => {
-                Box::new(SubjectIter::with_pattern(&self.triples, [s.1, 0, o.1]).map(move |t| {
-                    [s.0.clone(), Arc::from(self.dict.id_to_string(t[1], IdKind::Predicate).unwrap()), o.0.clone()]
-                }))
-            }
+            [Some(s), Some(p), None] => Box::new(
+                SubjectIter::with_pattern(&self.triples, [s.1, p.1, 0])
+                    .map(move |t| [s.0.clone(), p.0.clone(), cache.get(2, t[2]).unwrap()]),
+            ),
+            [Some(s), None, Some(o)] => Box::new(
+                SubjectIter::with_pattern(&self.triples, [s.1, 0, o.1])
+                    .map(move |t| [s.0.clone(), cache.get(1, t[1]).unwrap(), o.0.clone()]),
+            ),
             [Some(s), None, None] => Box::new(
                 SubjectIter::with_pattern(&self.triples, [s.1, 0, 0])
                     .map(move |t| [s.0.clone(), cache.get(1, t[1]).unwrap(), cache.get(2, t[2]).unwrap()]),
             ),
-            [None, Some(p), Some(o)] => {
-                Box::new(PredicateObjectIter::new(&self.triples, p.1, o.1).map(move |sid| {
-                    [Arc::from(self.dict.id_to_string(sid, IdKind::Subject).unwrap()), p.0.clone(), o.0.clone()]
-                }))
-            }
+            [None, Some(p), Some(o)] => Box::new(
+                PredicateObjectIter::new(&self.triples, p.1, o.1)
+                    .map(move |sid| [cache.get(0, sid).unwrap(), p.0.clone(), o.0.clone()]),
+            ),
             [None, Some(p), None] => Box::new(
                 PredicateIter::new(&self.triples, p.1)
                     .map(move |t| [cache.get(0, t[0]).unwrap(), p.0.clone(), cache.get(2, t[2]).unwrap()]),
@@ -486,12 +488,15 @@ struct TripleCache<'a, D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess>
     hdt: &'a HdtGeneric<D, S, B>,
     tid: TripleId,
     arc: [Option<Arc<str>>; 3],
+    /// Reusable scratch buffer for front-coding decompression, so translating a term is a single
+    /// `Arc` allocation rather than a fresh `Vec` + `String` + `Arc` per call.
+    buf: Vec<u8>,
 }
 
 impl<'a, D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> TripleCache<'a, D, S, B> {
     /// Build a new [`TripleCache`] for the given [`HdtGeneric`]
     const fn new(hdt: &'a HdtGeneric<D, S, B>) -> Self {
-        TripleCache { hdt, tid: [0; 3], arc: [None, None, None] }
+        TripleCache { hdt, tid: [0; 3], arc: [None, None, None], buf: Vec::new() }
     }
 
     /// Translate a triple of indexes into a triple of strings.
@@ -510,7 +515,8 @@ impl<'a, D: DictSectPfcAccess, S: SequenceAccess, B: BitmapAccess> TripleCache<'
         if self.tid[pos] == id {
             Ok(self.arc[pos].as_ref().unwrap().clone())
         } else {
-            let ret: Arc<str> = self.hdt.dict.id_to_string(id, IdKind::KINDS[pos])?.into();
+            let hdt = self.hdt;
+            let ret = hdt.dict.id_to_arc(id, IdKind::KINDS[pos], &mut self.buf)?;
             self.arc[pos] = Some(ret.clone());
             self.tid[pos] = id;
             Ok(ret)
